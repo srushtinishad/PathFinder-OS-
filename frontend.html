@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pathfinder OS | Multi-Path Simulation v2</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&family=Space+Grotesk:wght@300;500;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+--accent:#22d3ee;
+--purple:#bc13fe;
+--warning:#f87171;
+--bg:#020617;
+--glass:rgba(15,23,42,0.9);
+}
+body{
+background-color:var(--bg);
+color:#e2e8f0;
+font-family:'Space Grotesk',sans-serif;
+overflow-x:hidden;
+}
+#canvas-container{position:fixed;inset:0;z-index:-1;}
+.hidden{display:none!important;}
+.glass-panel{
+background:var(--glass);
+backdrop-filter:blur(20px);
+border:1px solid rgba(255,255,255,0.1);
+border-radius:25px;
+padding:2.5rem;
+box-shadow:0 0 50px rgba(0,0,0,0.5);
+}
+.roadmap-grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:20px;
+margin-top:30px;
+}
+.path-card{
+background:rgba(255,255,255,0.03);
+border:1px solid rgba(34,211,238,0.2);
+padding:20px;
+border-radius:15px;
+cursor:pointer;
+transition:0.3s;
+}
+.path-card:hover{
+background:rgba(34,211,238,0.1);
+transform:translateY(-5px);
+border-color:var(--accent);
+}
+.path-card.active{
+border-color:var(--purple);
+box-shadow:0 0 20px rgba(188,19,254,0.3);
+}
+.hud-stat{
+font-size:0.8rem;
+text-transform:uppercase;
+letter-spacing:1px;
+color:var(--accent);
+}
+.live-bar{
+height:4px;
+background:rgba(255,255,255,0.1);
+border-radius:2px;
+margin-top:5px;
+overflow:hidden;
+}
+.bar-fill{
+height:100%;
+background:var(--accent);
+width:0%;
+transition:width 1s ease-in-out;
+}
+.btn-neural{
+background:linear-gradient(90deg,var(--accent),var(--purple));
+border:none;
+color:white;
+padding:15px 40px;
+border-radius:50px;
+font-weight:700;
+letter-spacing:1px;
+transition:0.3s;
+}
+.btn-neural:hover{
+box-shadow:0 0 30px var(--accent);
+transform:scale(1.02);
+}
+.step-detail{transition:all 0.3s;}
+</style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+
+<!-- HERO -->
+<section id="hero" class="container min-vh-100 d-flex flex-column justify-content-center align-items-center">
+<h1 class="display-3 fw-bold mb-3" style="font-family:'Syncopate';">
+PATHFINDER<span style="color:var(--accent)">.OS</span>
+</h1>
+<p class="opacity-50 mb-5">v6 Multi-Trajectory Career Simulation</p>
+<button class="btn-neural" onclick="nav('hero','inputs')">START SIMULATION</button>
+</section>
+
+<!-- INPUT PAGE -->
+<section id="inputs" class="container min-vh-100 d-flex align-items-center justify-content-center hidden">
+<div class="glass-panel w-100" style="max-width:600px;">
+<h4 class="mb-4">Simulation Parameters</h4>
+
+<label class="text-info small mb-1">Skills</label>
+<input type="text" id="skills" class="form-control bg-dark border-info text-white mb-3 p-3" placeholder="Core Skills (e.g. AI, Physics)">
+<label class="text-info small mb-1">Industry</label>
+<input type="text" id="industry" class="form-control bg-dark border-info text-white mb-4 p-3" placeholder="Target Industry (e.g. Bio-Robotics)">
+<button class="btn-neural w-100" onclick="runSimulation()">INITIALIZE MULTI-PATH</button>
+</div>
+</section>
+
+<!-- DASHBOARD -->
+<section id="dashboard" class="container py-5 hidden">
+<div class="row g-4">
+
+<div class="col-lg-4">
+<div class="glass-panel mb-4">
+<h5>Live Simulation HUD</h5>
+<div class="mb-3 mt-4">
+<div class="hud-stat d-flex justify-content-between">Economic Stability <span id="val-econ">0%</span></div>
+<div class="live-bar"><div class="bar-fill" id="bar-econ"></div></div>
+</div>
+<div class="mb-3">
+<div class="hud-stat d-flex justify-content-between">Skill Relevance <span id="val-skill">0%</span></div>
+<div class="live-bar"><div class="bar-fill" id="bar-skill" style="background:var(--purple)"></div></div>
+</div>
+<div class="risk-box p-3 border border-danger rounded mt-4" style="background:rgba(248,113,113,0.1);">
+<div class="small text-danger fw-bold">!! REALITY CHECK !!</div>
+<p id="risk-msg" class="small mt-2 mb-0">Calculating potential setbacks...</p>
+</div>
+</div>
+</div>
+
+<div class="col-lg-8">
+<div class="glass-panel">
+<h4 id="ind-title">SIMULATED CAREER PATHS</h4>
+<p class="opacity-50">Choose a trajectory to see the interactive roadmap</p>
+<div class="roadmap-grid" id="path-options"></div>
+
+<div id="active-roadmap" class="mt-5 p-4 border-top border-secondary border-opacity-25 hidden">
+<h5 class="text-info mb-4" id="roadmap-title">Interactive Timeline</h5>
+<div id="timeline-flow"></div>
+</div>
+</div>
+</div>
+
+</div>
+<div class="text-center mt-5">
+<button class="btn btn-outline-light rounded-pill px-5" onclick="location.reload()">RESET SYSTEM</button>
+</div>
+</section>
+
+<script>
+/* 3D BACKGROUND */
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,1000);
+const renderer=new THREE.WebGLRenderer({alpha:true});
+renderer.setSize(window.innerWidth,window.innerHeight);
+document.getElementById('canvas-container').appendChild(renderer.domElement);
+const geom=new THREE.TorusKnotGeometry(10,3,100,16);
+const mat=new THREE.MeshBasicMaterial({color:0x22d3ee,wireframe:true,transparent:true,opacity:0.1});
+const knot=new THREE.Mesh(geom,mat);
+scene.add(knot);
+camera.position.z=30;
+function animate(){requestAnimationFrame(animate);knot.rotation.y+=0.005;renderer.render(scene,camera);}
+animate();
+
+/* NAVIGATION */
+function nav(from,to){gsap.to(`#${from}`,{opacity:0,y:-20,onComplete:()=>{
+document.getElementById(from).classList.add('hidden');
+document.getElementById(to).classList.remove('hidden');
+gsap.from(`#${to}`,{opacity:0,y:20});}});}
+
+/* MULTI-TRAJECTORY SIMULATION */
+function runSimulation(){
+const ind=document.getElementById('industry').value||"Emerging Sector";
+const skill=document.getElementById('skills').value||"General";
+document.getElementById('ind-title').innerText=`${ind.toUpperCase()} TRAJECTORIES`;
+
+/* Trajectories with unique roadmaps */
+const paths=[
+{id:1,title:`${skill} Executive`,icon:"🏛️",desc:`Lead teams and strategy in ${ind}`,
+phases:[
+{yr:"2026",task:"Foundation & Leadership",detail:`Build leadership skills in ${ind}.`},
+{yr:"2028",task:"Manager Role",detail:`Lead first team in ${ind}.`},
+{yr:"2031",task:"Senior Executive",detail:`Oversee multiple departments.`},
+{yr:"2035",task:"C-Level",detail:`Strategic executive decisions.`}
+]},
+{id:2,title:`${skill} Specialist`,icon:"⚙️",desc:`Technical mastery within ${ind}`,
+phases:[
+{yr:"2026",task:"Skill Mastery",detail:`Develop deep expertise in ${skill}.`},
+{yr:"2029",task:"Project Lead",detail:`Lead complex technical projects.`},
+{yr:"2032",task:"Subject Matter Expert",detail:`Become recognized in ${ind}.`},
+{yr:"2035",task:"Innovation Lead",detail:`Lead R&D initiatives.`}
+]},
+{id:3,title:`${skill} Consultant`,icon:"🌐",desc:`High-flexibility advisory roles`,
+phases:[
+{yr:"2026",task:"Portfolio Building",detail:`Gather diverse project experience.`},
+{yr:"2028",task:"Independent Consulting",detail:`Work with multiple clients.`},
+{yr:"2031",task:"Industry Advisor",detail:`Provide high-value insights.`},
+{yr:"2035",task:"Global Consultant",detail:`Recognized advisor worldwide.`}
+]}
+];
+
+const container=document.getElementById('path-options');
+container.innerHTML=paths.map(p=>`
+<div class="path-card" onclick="showPath(${p.id},'${p.title}')">
+<div class="h3">${p.icon}</div>
+<h6>${p.title}</h6>
+<p class="small opacity-50 mb-0">${p.desc}</p>
+</div>`).join('');
+
+/* Random Reality Risk */
+const risks=[
+"AI Disruption: Skills may be automated.",
+"Market Saturation: Industry has high competition.",
+"Regulatory Lock: New laws may restrict roles."
+];
+document.getElementById('risk-msg').innerText=risks[Math.floor(Math.random()*risks.length)];
+updateStats();
+nav('inputs','dashboard');
+
+/* Store paths globally for roadmap access */
+window.careerPaths=paths;
+}
+
+/* INTERACTIVE ROADMAP */
+function showPath(id,title){
+const path=window.careerPaths.find(p=>p.id===id);
+document.getElementById('active-roadmap').classList.remove('hidden');
+document.getElementById('roadmap-title').innerText=`${title} : 10-Year Forecast`;
+
+document.getElementById('timeline-flow').innerHTML=path.phases.map((p,i)=>`
+<div class="p-3 mb-3 border-start border-info roadmap-step" onclick="toggleStep(${i})" style="background:rgba(255,255,255,0.02);cursor:pointer">
+<span class="badge bg-info text-dark">${p.yr}</span>
+<p class="mt-2 mb-1 fw-bold">${p.task}</p>
+<div class="step-detail small opacity-50 hidden" id="step-${i}">${p.detail}<div class="mt-2 text-info small">✔ Click again to collapse</div></div>
+</div>`).join('');
+
+gsap.from(".roadmap-step",{opacity:0,x:-20,stagger:0.2});
+updateStats();
+}
+
+/* TOGGLE DETAILS */
+function toggleStep(i){
+const el=document.getElementById(`step-${i}`);
+if(el.classList.contains("hidden")){el.classList.remove("hidden");gsap.from(el,{opacity:0,y:-10});}
+else{el.classList.add("hidden");}
+}
+
+/* HUD STATS */
+function updateStats(){
+const econ=Math.floor(Math.random()*100);
+const skill=Math.floor(Math.random()*100);
+document.getElementById('val-econ').innerText=econ+'%';
+document.getElementById('bar-econ').style.width=econ+'%';
+document.getElementById('val-skill').innerText=skill+'%';
+document.getElementById('bar-skill').style.width=skill+'%';
+}
+</script>
+</body>
+</html>
